@@ -35,6 +35,7 @@ Installed tools:
   - Codex Desktop
   - Visual Studio Code
   - Cursor
+  - iTerm2
 
 Notes:
   - Claude Desktop, Claude Code, ChatGPT, Codex, Cursor, and VS Code sign-in remains manual
@@ -332,7 +333,8 @@ verify_installation() {
     "ChatGPT.app" \
     "Codex.app" \
     "Visual Studio Code.app" \
-    "Cursor.app"
+    "Cursor.app" \
+    "iTerm.app"
   do
     if app_path="$(find_app_path "$app_name")"; then
       log "Verified ${app_name} at ${app_path}"
