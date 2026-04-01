@@ -1,0 +1,8 @@
+# macOS baseline developer setup for a fresh Mac.
+brew "git"
+cask "google-chrome"
+cask "claude"
+cask "chatgpt"
+cask "codex-app"
+cask "visual-studio-code"
+cask "cursor"
