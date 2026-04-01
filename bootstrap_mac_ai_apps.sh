@@ -6,6 +6,7 @@ SCRIPT_NAME="$(basename "$0")"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BREWFILE_PATH="${SCRIPT_DIR}/Brewfile.mac-ai-apps"
 HOMEBREW_PKG_URL="https://github.com/Homebrew/brew/releases/latest/download/Homebrew.pkg"
+BREW_BIN=""
 RUN_BREW_UPDATE=1
 RUN_BREW_UPGRADE=0
 
@@ -179,6 +180,12 @@ install_homebrew_if_needed() {
 load_brew_env() {
   local brew_bin="$1"
   eval "$("$brew_bin" shellenv)"
+  export PATH="$(dirname "$brew_bin"):$PATH"
+}
+
+brew_cmd() {
+  [[ -n "$BREW_BIN" ]] || fail "internal error: BREW_BIN is not set"
+  "$BREW_BIN" "$@"
 }
 
 upsert_managed_block() {
@@ -228,7 +235,7 @@ run_brew_update() {
   fi
 
   log "Updating Homebrew metadata"
-  brew update --quiet
+  brew_cmd update --quiet
   export HOMEBREW_NO_AUTO_UPDATE=1
 }
 
@@ -243,7 +250,7 @@ install_from_brewfile() {
     bundle_args+=(--no-upgrade)
   fi
 
-  brew "${bundle_args[@]}"
+  brew_cmd "${bundle_args[@]}"
 }
 
 find_app_path() {
@@ -272,8 +279,8 @@ verify_installation() {
   local app_path
 
   log "Verifying installed tools and apps"
-  brew bundle check "--file=${BREWFILE_PATH}" >/dev/null
-  assert_command brew
+  brew_cmd bundle check "--file=${BREWFILE_PATH}" >/dev/null
+  [[ -x "$BREW_BIN" ]] || fail "expected brew binary not found: $BREW_BIN"
 
   for app_name in \
     "Google Chrome.app" \
@@ -308,9 +315,9 @@ main() {
   ensure_macos
   ensure_brewfile_exists
 
-  brew_bin="$(install_homebrew_if_needed)"
-  load_brew_env "$brew_bin"
-  persist_brew_shellenv "$brew_bin"
+  BREW_BIN="$(install_homebrew_if_needed)"
+  load_brew_env "$BREW_BIN"
+  persist_brew_shellenv "$BREW_BIN"
   run_brew_update
   install_from_brewfile
   verify_installation
