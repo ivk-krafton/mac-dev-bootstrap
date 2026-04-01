@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_NAME="$(basename "$0")"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BREWFILE_PATH="${SCRIPT_DIR}/Brewfile.mac-ai-apps"
+HOMEBREW_PKG_URL="https://github.com/Homebrew/brew/releases/latest/download/Homebrew.pkg"
 RUN_BREW_UPDATE=1
 RUN_BREW_UPGRADE=0
 
@@ -150,6 +151,8 @@ wait_for_brew_bin() {
 
 install_homebrew_if_needed() {
   local brew_bin
+  local tmp_dir
+  local pkg_file
 
   if brew_bin="$(detect_brew_bin)"; then
     printf '%s\n' "$brew_bin"
@@ -157,12 +160,19 @@ install_homebrew_if_needed() {
   fi
 
   log "Homebrew not found. Installing it now"
-  log "Administrator privileges may be requested once by the official installer"
+  log "Administrator privileges may be requested once to install the official Homebrew package"
 
-  NONINTERACTIVE=1 /bin/bash -c \
-    "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  tmp_dir="$(mktemp -d)"
+  pkg_file="${tmp_dir}/Homebrew.pkg"
+
+  log "Downloading ${HOMEBREW_PKG_URL}"
+  curl -fL "${HOMEBREW_PKG_URL}" -o "$pkg_file"
+
+  log "Installing Homebrew package"
+  sudo /usr/sbin/installer -pkg "$pkg_file" -target /
 
   brew_bin="$(wait_for_brew_bin)" || fail "Homebrew installation finished, but brew was not found in /opt/homebrew/bin or /usr/local/bin"
+  rm -rf "$tmp_dir"
   printf '%s\n' "$brew_bin"
 }
 
