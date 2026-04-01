@@ -240,15 +240,18 @@ upsert_managed_block() {
   rm -f "$tmp_file"
 }
 
-persist_brew_shellenv() {
+persist_shell_paths() {
   local brew_bin="$1"
   local target_file="$HOME/.zprofile"
-  local block_start="# >>> homebrew shellenv managed by ${SCRIPT_NAME} >>>"
-  local block_end="# <<< homebrew shellenv managed by ${SCRIPT_NAME} <<<"
+  local block_start="# >>> shell paths managed by ${SCRIPT_NAME} >>>"
+  local block_end="# <<< shell paths managed by ${SCRIPT_NAME} <<<"
   local managed_block_file
 
   managed_block_file="$(mktemp)"
-  printf 'eval "$(%s shellenv)"\n' "$brew_bin" > "$managed_block_file"
+  cat > "$managed_block_file" <<EOF
+export PATH="\$HOME/.local/bin:\$PATH"
+eval "\$(${brew_bin} shellenv)"
+EOF
   upsert_managed_block "$target_file" "$block_start" "$block_end" "$managed_block_file"
   rm -f "$managed_block_file"
 }
@@ -356,7 +359,7 @@ main() {
 
   BREW_BIN="$(install_homebrew_if_needed)"
   load_brew_env "$BREW_BIN"
-  persist_brew_shellenv "$BREW_BIN"
+  persist_shell_paths "$BREW_BIN"
   run_brew_update
   install_from_brewfile
   install_claude_code
