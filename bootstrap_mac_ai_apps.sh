@@ -14,18 +14,15 @@ Usage:
   ./${SCRIPT_NAME} [--upgrade] [--no-brew-update] [--brewfile <path>]
 
 What it does:
-  - Checks for Xcode Command Line Tools and requests installation if missing
   - Installs Homebrew if it is missing
   - Persists Homebrew shellenv to ~/.zprofile
-  - Installs git and macOS apps listed in the Brewfile
+  - Installs macOS apps listed in the Brewfile
 
 Default Brewfile:
   ${BREWFILE_PATH}
 
 Installed tools:
-  - Xcode Command Line Tools
   - Homebrew
-  - git
   - Google Chrome
   - Claude Desktop
   - ChatGPT Desktop
@@ -34,7 +31,6 @@ Installed tools:
   - Cursor
 
 Notes:
-  - Xcode Command Line Tools may show an Apple installer dialog the first time
   - Claude, ChatGPT, Codex, Cursor, and VS Code sign-in remains manual
 
 Options:
@@ -91,38 +87,6 @@ ensure_macos() {
 
 ensure_brewfile_exists() {
   [[ -f "$BREWFILE_PATH" ]] || fail "Brewfile not found: $BREWFILE_PATH"
-}
-
-has_xcode_tools() {
-  local developer_dir
-
-  developer_dir="$(xcode-select -p 2>/dev/null || true)"
-  [[ -n "$developer_dir" && -d "$developer_dir" ]]
-}
-
-install_xcode_tools_if_needed() {
-  local attempt=0
-  local max_attempts=180
-
-  if has_xcode_tools; then
-    log "Xcode Command Line Tools already present at $(xcode-select -p)"
-    return 0
-  fi
-
-  log "Xcode Command Line Tools not found. Requesting installation from Apple"
-  xcode-select --install >/dev/null 2>&1 || true
-  log "If an Apple installer dialog appears, approve it. Waiting for installation to finish"
-
-  until has_xcode_tools; do
-    attempt=$((attempt + 1))
-    if [[ "$attempt" -ge "$max_attempts" ]]; then
-      fail "Xcode Command Line Tools did not finish installing within 30 minutes. Re-run this script after installation completes"
-    fi
-
-    sleep 10
-  done
-
-  log "Xcode Command Line Tools are ready at $(xcode-select -p)"
 }
 
 detect_brew_bin() {
@@ -222,10 +186,10 @@ install_from_brewfile() {
   local bundle_args=(bundle install "--file=${BREWFILE_PATH}" --verbose)
 
   if [[ "$RUN_BREW_UPGRADE" -eq 1 ]]; then
-    log "Installing and upgrading tools from ${BREWFILE_PATH}"
+    log "Installing and upgrading apps from ${BREWFILE_PATH}"
     bundle_args+=(--upgrade)
   else
-    log "Installing tools from ${BREWFILE_PATH} without upgrading existing installs"
+    log "Installing apps from ${BREWFILE_PATH} without upgrading existing installs"
     bundle_args+=(--no-upgrade)
   fi
 
@@ -258,10 +222,8 @@ verify_installation() {
   local app_path
 
   log "Verifying installed tools and apps"
-  has_xcode_tools || fail "Xcode Command Line Tools were not detected after installation"
   brew bundle check "--file=${BREWFILE_PATH}" >/dev/null
   assert_command brew
-  assert_command git
 
   for app_name in \
     "Google Chrome.app" \
@@ -284,9 +246,8 @@ print_next_steps() {
 
 Next steps:
   1. Restart Terminal or run: source ~/.zprofile
-  2. Confirm git is coming from Homebrew with: git --version && which git
-  3. Open Claude, ChatGPT, Codex, Cursor, and VS Code once to complete sign-in
-  4. If this is your standard baseline, copy this script and Brewfile to the other Macs and run the same command
+  2. Open Claude, ChatGPT, Codex, Cursor, and VS Code once to complete sign-in
+  3. If this is your standard baseline, copy this script and Brewfile to the other Macs and run the same command
 EOF
 }
 
@@ -297,7 +258,6 @@ main() {
   ensure_macos
   ensure_brewfile_exists
 
-  install_xcode_tools_if_needed
   brew_bin="$(install_homebrew_if_needed)"
   load_brew_env "$brew_bin"
   persist_brew_shellenv "$brew_bin"
