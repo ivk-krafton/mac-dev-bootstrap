@@ -6,6 +6,8 @@ SCRIPT_NAME="$(basename "$0")"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BREWFILE_PATH="${SCRIPT_DIR}/Brewfile.mac-ai-apps"
 HOMEBREW_PKG_URL="https://github.com/Homebrew/brew/releases/latest/download/Homebrew.pkg"
+CLAUDE_CODE_INSTALL_URL="https://claude.ai/install.sh"
+CLAUDE_CODE_CHANNEL="stable"
 BREW_BIN=""
 RUN_BREW_UPDATE=1
 RUN_BREW_UPGRADE=0
@@ -19,12 +21,14 @@ What it does:
   - Installs Homebrew if it is missing
   - Persists Homebrew shellenv to ~/.zprofile
   - Installs macOS apps listed in the Brewfile
+  - Installs Claude Code CLI from Anthropic's official stable installer
 
 Default Brewfile:
   ${BREWFILE_PATH}
 
 Installed tools:
   - Homebrew
+  - Claude Code CLI (stable)
   - Google Chrome
   - Claude Desktop
   - ChatGPT Desktop
@@ -33,7 +37,7 @@ Installed tools:
   - Cursor
 
 Notes:
-  - Claude, ChatGPT, Codex, Cursor, and VS Code sign-in remains manual
+  - Claude Desktop, Claude Code, ChatGPT, Codex, Cursor, and VS Code sign-in remains manual
 
 Options:
   --upgrade         Upgrade already installed casks to the latest version
@@ -106,6 +110,28 @@ detect_brew_bin() {
     printf '%s\n' /usr/local/bin/brew
     return 0
   fi
+
+  return 1
+}
+
+detect_claude_bin() {
+  local candidate
+
+  if command -v claude >/dev/null 2>&1; then
+    command -v claude
+    return 0
+  fi
+
+  for candidate in \
+    "$HOME/.local/bin/claude" \
+    "/usr/local/bin/claude" \
+    "/opt/homebrew/bin/claude"
+  do
+    if [[ -x "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
 
   return 1
 }
@@ -253,6 +279,19 @@ install_from_brewfile() {
   brew_cmd "${bundle_args[@]}"
 }
 
+install_claude_code() {
+  local claude_bin
+
+  if [[ "$RUN_BREW_UPGRADE" -eq 0 ]] && claude_bin="$(detect_claude_bin)"; then
+    log "Claude Code CLI already present at ${claude_bin}; skipping reinstall"
+    return 0
+  fi
+
+  log "Installing Claude Code CLI (${CLAUDE_CODE_CHANNEL}) from ${CLAUDE_CODE_INSTALL_URL}"
+  curl -fsSL "${CLAUDE_CODE_INSTALL_URL}" | bash -s "${CLAUDE_CODE_CHANNEL}"
+  export PATH="$HOME/.local/bin:$PATH"
+}
+
 find_app_path() {
   local app_name="$1"
 
@@ -269,18 +308,20 @@ find_app_path() {
   return 1
 }
 
-assert_command() {
-  local command_name="$1"
-  command -v "$command_name" >/dev/null 2>&1 || fail "expected command not found in PATH: $command_name"
-}
-
 verify_installation() {
   local app_name
   local app_path
+  local claude_bin
 
   log "Verifying installed tools and apps"
   brew_cmd bundle check "--file=${BREWFILE_PATH}" >/dev/null
   [[ -x "$BREW_BIN" ]] || fail "expected brew binary not found: $BREW_BIN"
+
+  if claude_bin="$(detect_claude_bin)"; then
+    log "Verified Claude Code CLI at ${claude_bin}"
+  else
+    warn "Claude Code CLI was not found in PATH, ~/.local/bin, /usr/local/bin, or /opt/homebrew/bin yet"
+  fi
 
   for app_name in \
     "Google Chrome.app" \
@@ -303,14 +344,12 @@ print_next_steps() {
 
 Next steps:
   1. Restart Terminal or run: source ~/.zprofile
-  2. Open Claude, ChatGPT, Codex, Cursor, and VS Code once to complete sign-in
+  2. Open Claude, Claude Code, ChatGPT, Codex, Cursor, and VS Code once to complete sign-in
   3. If this is your standard baseline, copy this script and Brewfile to the other Macs and run the same command
 EOF
 }
 
 main() {
-  local brew_bin
-
   parse_args "$@"
   ensure_macos
   ensure_brewfile_exists
@@ -320,6 +359,7 @@ main() {
   persist_brew_shellenv "$BREW_BIN"
   run_brew_update
   install_from_brewfile
+  install_claude_code
   verify_installation
   print_next_steps
 }
