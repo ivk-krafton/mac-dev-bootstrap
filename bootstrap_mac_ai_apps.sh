@@ -108,6 +108,46 @@ detect_brew_bin() {
   return 1
 }
 
+preferred_brew_bin() {
+  case "$(uname -m)" in
+    arm64)
+      printf '%s\n' /opt/homebrew/bin/brew
+      ;;
+    x86_64)
+      printf '%s\n' /usr/local/bin/brew
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+wait_for_brew_bin() {
+  local attempt=0
+  local max_attempts=30
+  local brew_bin
+  local preferred_bin
+
+  preferred_bin="$(preferred_brew_bin 2>/dev/null || true)"
+
+  while [[ "$attempt" -lt "$max_attempts" ]]; do
+    if brew_bin="$(detect_brew_bin)"; then
+      printf '%s\n' "$brew_bin"
+      return 0
+    fi
+
+    if [[ -n "$preferred_bin" && -x "$preferred_bin" ]]; then
+      printf '%s\n' "$preferred_bin"
+      return 0
+    fi
+
+    sleep 2
+    attempt=$((attempt + 1))
+  done
+
+  return 1
+}
+
 install_homebrew_if_needed() {
   local brew_bin
 
@@ -122,7 +162,7 @@ install_homebrew_if_needed() {
   NONINTERACTIVE=1 /bin/bash -c \
     "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-  brew_bin="$(detect_brew_bin)" || fail "Homebrew installation finished, but brew was not found"
+  brew_bin="$(wait_for_brew_bin)" || fail "Homebrew installation finished, but brew was not found in /opt/homebrew/bin or /usr/local/bin"
   printf '%s\n' "$brew_bin"
 }
 
