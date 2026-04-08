@@ -17,7 +17,7 @@ usage() {
   cat <<USAGE
 $SCRIPT_NAME v$VERSION
 
-macOS 시험용 로컬 AI 환경(Cursor / Claude Code / Codex) 백업 및 초기화 스크립트
+macOS 시험용 로컬 AI 환경(Cursor / Claude Code / Codex / Antigravity) 백업 및 초기화 스크립트
 - 백업 위치는 항상 ~/Downloads 고정
 - 백업이 정상적으로 검증된 경우에만 원본 삭제
 - 라벨/백업 경로 등 추가 인자를 받지 않음
@@ -56,6 +56,16 @@ CODEX_SESSIONS="${CODEX_ROOT}/sessions"
 CODEX_CONFIG="${CODEX_ROOT}/config.toml"
 CODEX_AGENTS="${CODEX_ROOT}/AGENTS.md"
 CODEX_AGENTS_OVERRIDE="${CODEX_ROOT}/AGENTS.override.md"
+ANTIGRAVITY_ROOT="${HOME}/.gemini/antigravity"
+ANTIGRAVITY_CONVERSATIONS="${ANTIGRAVITY_ROOT}/conversations"
+ANTIGRAVITY_BRAIN="${ANTIGRAVITY_ROOT}/brain"
+ANTIGRAVITY_IMPLICIT="${ANTIGRAVITY_ROOT}/implicit"
+ANTIGRAVITY_CODE_TRACKER="${ANTIGRAVITY_ROOT}/code_tracker"
+ANTIGRAVITY_BROWSER_RECORDINGS="${ANTIGRAVITY_ROOT}/browser_recordings"
+ANTIGRAVITY_KNOWLEDGE="${ANTIGRAVITY_ROOT}/knowledge"
+ANTIGRAVITY_CONTEXT_STATE="${ANTIGRAVITY_ROOT}/context_state"
+ANTIGRAVITY_CONFIG_ROOT="${HOME}/Library/Application Support/Antigravity/User"
+ANTIGRAVITY_GLOBAL_STORAGE="${ANTIGRAVITY_CONFIG_ROOT}/globalStorage"
 
 FORCE=0
 RESTORE_FROM=""
@@ -204,6 +214,40 @@ config_path=$CODEX_CONFIG
 config_exists=$( [[ -e "$CODEX_CONFIG" ]] && echo yes || echo no )
 config_files=$(file_count "$CODEX_CONFIG")
 config_bytes=$(path_size_bytes "$CODEX_CONFIG")
+
+[antigravity]
+conversations_path=$ANTIGRAVITY_CONVERSATIONS
+conversations_exists=$( [[ -e "$ANTIGRAVITY_CONVERSATIONS" ]] && echo yes || echo no )
+conversations_files=$(file_count "$ANTIGRAVITY_CONVERSATIONS")
+conversations_bytes=$(path_size_bytes "$ANTIGRAVITY_CONVERSATIONS")
+brain_path=$ANTIGRAVITY_BRAIN
+brain_exists=$( [[ -e "$ANTIGRAVITY_BRAIN" ]] && echo yes || echo no )
+brain_files=$(file_count "$ANTIGRAVITY_BRAIN")
+brain_bytes=$(path_size_bytes "$ANTIGRAVITY_BRAIN")
+implicit_path=$ANTIGRAVITY_IMPLICIT
+implicit_exists=$( [[ -e "$ANTIGRAVITY_IMPLICIT" ]] && echo yes || echo no )
+implicit_files=$(file_count "$ANTIGRAVITY_IMPLICIT")
+implicit_bytes=$(path_size_bytes "$ANTIGRAVITY_IMPLICIT")
+code_tracker_path=$ANTIGRAVITY_CODE_TRACKER
+code_tracker_exists=$( [[ -e "$ANTIGRAVITY_CODE_TRACKER" ]] && echo yes || echo no )
+code_tracker_files=$(file_count "$ANTIGRAVITY_CODE_TRACKER")
+code_tracker_bytes=$(path_size_bytes "$ANTIGRAVITY_CODE_TRACKER")
+browser_recordings_path=$ANTIGRAVITY_BROWSER_RECORDINGS
+browser_recordings_exists=$( [[ -e "$ANTIGRAVITY_BROWSER_RECORDINGS" ]] && echo yes || echo no )
+browser_recordings_files=$(file_count "$ANTIGRAVITY_BROWSER_RECORDINGS")
+browser_recordings_bytes=$(path_size_bytes "$ANTIGRAVITY_BROWSER_RECORDINGS")
+knowledge_path=$ANTIGRAVITY_KNOWLEDGE
+knowledge_exists=$( [[ -e "$ANTIGRAVITY_KNOWLEDGE" ]] && echo yes || echo no )
+knowledge_files=$(file_count "$ANTIGRAVITY_KNOWLEDGE")
+knowledge_bytes=$(path_size_bytes "$ANTIGRAVITY_KNOWLEDGE")
+context_state_path=$ANTIGRAVITY_CONTEXT_STATE
+context_state_exists=$( [[ -e "$ANTIGRAVITY_CONTEXT_STATE" ]] && echo yes || echo no )
+context_state_files=$(file_count "$ANTIGRAVITY_CONTEXT_STATE")
+context_state_bytes=$(path_size_bytes "$ANTIGRAVITY_CONTEXT_STATE")
+global_storage_path=$ANTIGRAVITY_GLOBAL_STORAGE
+global_storage_exists=$( [[ -e "$ANTIGRAVITY_GLOBAL_STORAGE" ]] && echo yes || echo no )
+global_storage_files=$(file_count "$ANTIGRAVITY_GLOBAL_STORAGE")
+global_storage_bytes=$(path_size_bytes "$ANTIGRAVITY_GLOBAL_STORAGE")
 EOF_MANIFEST
 }
 
@@ -236,6 +280,18 @@ verify_backup() {
     warn "Codex sessions backup missing"
     ok=0
   fi
+  if [[ -e "$ANTIGRAVITY_CONVERSATIONS" && ! -e "$BACKUP_DIR/antigravity/conversations" ]]; then
+    warn "Antigravity conversations backup missing"
+    ok=0
+  fi
+  if [[ -e "$ANTIGRAVITY_BRAIN" && ! -e "$BACKUP_DIR/antigravity/brain" ]]; then
+    warn "Antigravity brain backup missing"
+    ok=0
+  fi
+  if [[ -e "$ANTIGRAVITY_GLOBAL_STORAGE" && ! -e "$BACKUP_DIR/antigravity/globalStorage" ]]; then
+    warn "Antigravity globalStorage backup missing"
+    ok=0
+  fi
 
   tar -C "$DEFAULT_BACKUP_ROOT" -czf "$ARCHIVE_PATH" "$(basename "$BACKUP_DIR")"
   [[ -s "$ARCHIVE_PATH" ]] || { warn "Archive was not created correctly"; ok=0; }
@@ -259,6 +315,9 @@ print_inspect() {
   printf '%-14s %-6s %-10s %-10s %s\n' "Claude ide" "$( [[ -e "$CLAUDE_IDE" ]] && echo yes || echo no )" "$(file_count "$CLAUDE_IDE")" "$(human_size "$(path_size_bytes "$CLAUDE_IDE")")" "$CLAUDE_IDE"
   printf '%-14s %-6s %-10s %-10s %s\n' "Codex hist" "$( [[ -e "$CODEX_HISTORY" ]] && echo yes || echo no )" "$(file_count "$CODEX_HISTORY")" "$(human_size "$(path_size_bytes "$CODEX_HISTORY")")" "$CODEX_HISTORY"
   printf '%-14s %-6s %-10s %-10s %s\n' "Codex sess" "$( [[ -e "$CODEX_SESSIONS" ]] && echo yes || echo no )" "$(file_count "$CODEX_SESSIONS")" "$(human_size "$(path_size_bytes "$CODEX_SESSIONS")")" "$CODEX_SESSIONS"
+  printf '%-14s %-6s %-10s %-10s %s\n' "Antigrav conv" "$( [[ -e "$ANTIGRAVITY_CONVERSATIONS" ]] && echo yes || echo no )" "$(file_count "$ANTIGRAVITY_CONVERSATIONS")" "$(human_size "$(path_size_bytes "$ANTIGRAVITY_CONVERSATIONS")")" "$ANTIGRAVITY_CONVERSATIONS"
+  printf '%-14s %-6s %-10s %-10s %s\n' "Antigrav brain" "$( [[ -e "$ANTIGRAVITY_BRAIN" ]] && echo yes || echo no )" "$(file_count "$ANTIGRAVITY_BRAIN")" "$(human_size "$(path_size_bytes "$ANTIGRAVITY_BRAIN")")" "$ANTIGRAVITY_BRAIN"
+  printf '%-14s %-6s %-10s %-10s %s\n' "Antigrav gdb" "$( [[ -e "$ANTIGRAVITY_GLOBAL_STORAGE" ]] && echo yes || echo no )" "$(file_count "$ANTIGRAVITY_GLOBAL_STORAGE")" "$(human_size "$(path_size_bytes "$ANTIGRAVITY_GLOBAL_STORAGE")")" "$ANTIGRAVITY_GLOBAL_STORAGE"
   printf '\nBackup destination is fixed to: %s\n' "$DEFAULT_BACKUP_ROOT"
 }
 
@@ -280,6 +339,15 @@ do_backup() {
   copy_if_exists "$CODEX_AGENTS" "$BACKUP_DIR/codex/"
   copy_if_exists "$CODEX_AGENTS_OVERRIDE" "$BACKUP_DIR/codex/"
 
+  copy_if_exists "$ANTIGRAVITY_CONVERSATIONS" "$BACKUP_DIR/antigravity/"
+  copy_if_exists "$ANTIGRAVITY_BRAIN" "$BACKUP_DIR/antigravity/"
+  copy_if_exists "$ANTIGRAVITY_IMPLICIT" "$BACKUP_DIR/antigravity/"
+  copy_if_exists "$ANTIGRAVITY_CODE_TRACKER" "$BACKUP_DIR/antigravity/"
+  copy_if_exists "$ANTIGRAVITY_BROWSER_RECORDINGS" "$BACKUP_DIR/antigravity/"
+  copy_if_exists "$ANTIGRAVITY_KNOWLEDGE" "$BACKUP_DIR/antigravity/"
+  copy_if_exists "$ANTIGRAVITY_CONTEXT_STATE" "$BACKUP_DIR/antigravity/"
+  copy_if_exists "$ANTIGRAVITY_GLOBAL_STORAGE" "$BACKUP_DIR/antigravity/"
+
   write_manifest "$BACKUP_DIR/manifest.txt"
   verify_backup
 }
@@ -296,6 +364,15 @@ do_reset() {
   remove_contents "$CLAUDE_IDE"
   safe_remove_file "$CODEX_HISTORY"
   remove_contents "$CODEX_SESSIONS"
+
+  remove_contents "$ANTIGRAVITY_CONVERSATIONS"
+  remove_contents "$ANTIGRAVITY_BRAIN"
+  remove_contents "$ANTIGRAVITY_IMPLICIT"
+  remove_contents "$ANTIGRAVITY_CODE_TRACKER"
+  remove_contents "$ANTIGRAVITY_BROWSER_RECORDINGS"
+  remove_contents "$ANTIGRAVITY_KNOWLEDGE"
+  remove_contents "$ANTIGRAVITY_CONTEXT_STATE"
+  remove_contents "$ANTIGRAVITY_GLOBAL_STORAGE"
 
   log "Reset completed only after verified backup"
 }
@@ -330,6 +407,16 @@ do_restore() {
   [[ -f "$RESTORE_FROM/codex/config.toml" ]] && rsync -a "$RESTORE_FROM/codex/config.toml" "$CODEX_ROOT/"
   [[ -f "$RESTORE_FROM/codex/AGENTS.md" ]] && rsync -a "$RESTORE_FROM/codex/AGENTS.md" "$CODEX_ROOT/"
   [[ -f "$RESTORE_FROM/codex/AGENTS.override.md" ]] && rsync -a "$RESTORE_FROM/codex/AGENTS.override.md" "$CODEX_ROOT/"
+
+  mkdir -p "$ANTIGRAVITY_ROOT" "$ANTIGRAVITY_CONFIG_ROOT"
+  [[ -d "$RESTORE_FROM/antigravity/conversations" ]] && { rm -rf "$ANTIGRAVITY_CONVERSATIONS"; rsync -a "$RESTORE_FROM/antigravity/conversations" "$ANTIGRAVITY_ROOT/"; }
+  [[ -d "$RESTORE_FROM/antigravity/brain" ]] && { rm -rf "$ANTIGRAVITY_BRAIN"; rsync -a "$RESTORE_FROM/antigravity/brain" "$ANTIGRAVITY_ROOT/"; }
+  [[ -d "$RESTORE_FROM/antigravity/implicit" ]] && { rm -rf "$ANTIGRAVITY_IMPLICIT"; rsync -a "$RESTORE_FROM/antigravity/implicit" "$ANTIGRAVITY_ROOT/"; }
+  [[ -d "$RESTORE_FROM/antigravity/code_tracker" ]] && { rm -rf "$ANTIGRAVITY_CODE_TRACKER"; rsync -a "$RESTORE_FROM/antigravity/code_tracker" "$ANTIGRAVITY_ROOT/"; }
+  [[ -d "$RESTORE_FROM/antigravity/browser_recordings" ]] && { rm -rf "$ANTIGRAVITY_BROWSER_RECORDINGS"; rsync -a "$RESTORE_FROM/antigravity/browser_recordings" "$ANTIGRAVITY_ROOT/"; }
+  [[ -d "$RESTORE_FROM/antigravity/knowledge" ]] && { rm -rf "$ANTIGRAVITY_KNOWLEDGE"; rsync -a "$RESTORE_FROM/antigravity/knowledge" "$ANTIGRAVITY_ROOT/"; }
+  [[ -d "$RESTORE_FROM/antigravity/context_state" ]] && { rm -rf "$ANTIGRAVITY_CONTEXT_STATE"; rsync -a "$RESTORE_FROM/antigravity/context_state" "$ANTIGRAVITY_ROOT/"; }
+  [[ -d "$RESTORE_FROM/antigravity/globalStorage" ]] && { rm -rf "$ANTIGRAVITY_GLOBAL_STORAGE"; mkdir -p "$ANTIGRAVITY_CONFIG_ROOT"; rsync -a "$RESTORE_FROM/antigravity/globalStorage" "$ANTIGRAVITY_CONFIG_ROOT/"; }
 
   log "Restore completed from: $RESTORE_FROM"
 }
