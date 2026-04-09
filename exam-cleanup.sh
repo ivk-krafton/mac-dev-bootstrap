@@ -26,7 +26,6 @@ SUBMISSIONS_DIR=""
 AGENT_LOGS_ARCHIVE_PATH=""
 WORK_PRODUCTS_ARCHIVE_PATH=""
 SUBMISSIONS_ARCHIVE_PATH=""
-MANIFEST_PATH=""
 REPORT_PATH=""
 
 WORKSPACE_ROOT=""
@@ -65,6 +64,7 @@ ANTIGRAVITY_CONFIG_ROOT="${HOME}/Library/Application Support/Antigravity/User"
 ANTIGRAVITY_GLOBAL_STORAGE="${ANTIGRAVITY_CONFIG_ROOT}/globalStorage"
 
 SNAPSHOT_FILE=""
+RESTORE_TEMP_DIR=""
 
 log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*"; }
 warn() { printf '[%s] WARN: %s\n' "$(date '+%F %T')" "$*" >&2; }
@@ -72,6 +72,7 @@ die() { printf '[%s] ERROR: %s\n' "$(date '+%F %T')" "$*" >&2; exit 1; }
 
 cleanup_tmp() {
   [[ -n "${SNAPSHOT_FILE:-}" && -f "${SNAPSHOT_FILE:-}" ]] && rm -f "$SNAPSHOT_FILE"
+  [[ -n "${RESTORE_TEMP_DIR:-}" && -d "${RESTORE_TEMP_DIR:-}" ]] && rm -rf "$RESTORE_TEMP_DIR"
 }
 trap cleanup_tmp EXIT
 
@@ -340,7 +341,6 @@ prepare_runtime() {
   AGENT_LOGS_ARCHIVE_PATH="${BACKUP_DIR}/${DISPLAY_NAME_SAFE}_에이전트채팅로그.tar.gz"
   WORK_PRODUCTS_ARCHIVE_PATH="${BACKUP_DIR}/${DISPLAY_NAME_SAFE}_작업물.tar.gz"
   SUBMISSIONS_ARCHIVE_PATH="${BACKUP_DIR}/${DISPLAY_NAME_SAFE}_제출물.tar.gz"
-  MANIFEST_PATH="${BACKUP_DIR}/manifest.txt"
   REPORT_PATH="${BACKUP_DIR}/report.json"
 }
 
@@ -376,28 +376,38 @@ create_directory_archive() {
   log "Created archive: $archive_path"
 }
 
-write_manifest() {
-  {
-    printf 'created_at=%s\n' "$TS_ISO"
-    printf 'user=%s\n' "$USER_SAFE"
-    printf 'candidate_name=%s\n' "$NAME"
-    printf 'display_name_safe=%s\n' "$DISPLAY_NAME_SAFE"
-    printf 'candidate_safe=%s\n' "$CANDIDATE_SAFE"
-    printf 'project_root=%s\n' "$PROJECT_ROOT"
-    printf 'workspace_root=%s\n' "$WORKSPACE_ROOT"
-    printf 'workspace_note=%s\n' "$WORKSPACE_DISCOVERY_NOTE"
-    printf 'backup_dir=%s\n' "$BACKUP_DIR"
-    printf 'agent_logs_dir=%s\n' "$AGENT_LOGS_DIR"
-    printf 'work_products_dir=%s\n' "$WORK_PRODUCTS_DIR"
-    printf 'submissions_dir=%s\n' "$SUBMISSIONS_DIR"
-    printf 'agent_logs_archive=%s\n' "$AGENT_LOGS_ARCHIVE_PATH"
-    printf 'work_products_archive=%s\n' "$WORK_PRODUCTS_ARCHIVE_PATH"
-    printf 'submissions_archive=%s\n' "$SUBMISSIONS_ARCHIVE_PATH"
-    printf '\n[snapshot]\n'
-    while IFS=$'\t' read -r label kind path_value exists files bytes; do
-      printf '%s | %s | %s | files=%s | bytes=%s | %s\n' "$label" "$kind" "$exists" "$files" "$bytes" "$path_value"
-    done < "$SNAPSHOT_FILE"
-  } > "$MANIFEST_PATH"
+extract_archive_to_parent() {
+  local archive_path="$1"
+  local parent_dir="$2"
+
+  [[ -f "$archive_path" ]] || return 0
+
+  mkdir -p "$parent_dir"
+  tar -C "$parent_dir" -xzf "$archive_path"
+}
+
+remove_backup_directories() {
+  rm -rf "$AGENT_LOGS_DIR" "$WORK_PRODUCTS_DIR" "$SUBMISSIONS_DIR"
+}
+
+clear_directory_entries() {
+  local target_dir="$1"
+  local excluded_path="${2:-}"
+  local entry=""
+
+  [[ -d "$target_dir" ]] || return 0
+
+  shopt -s nullglob
+  for entry in "$target_dir"/* "$target_dir"/.[!.]* "$target_dir"/..?*; do
+    [[ -e "$entry" ]] || continue
+    if [[ -n "$excluded_path" && "$entry" == "$excluded_path" ]]; then
+      log "Preserved path: $entry"
+      continue
+    fi
+    rm -rf "$entry"
+    log "Removed path: $entry"
+  done
+  shopt -u nullglob
 }
 
 write_report_json() {
@@ -405,12 +415,13 @@ write_report_json() {
   local status="$2"
   local report_path="$3"
 
-  python3 - "$SNAPSHOT_FILE" "$report_path" "$mode" "$status" "$TS_ISO" "$NAME" "$DISPLAY_NAME_SAFE" "$CANDIDATE_SAFE" "$PROJECT_ROOT" "$WORKSPACE_ROOT" "$WORKSPACE_DISCOVERY_NOTE" "$BACKUP_DIR" "$AGENT_LOGS_DIR" "$WORK_PRODUCTS_DIR" "$SUBMISSIONS_DIR" "$EXAM_DATE" <<'PY'
+  python3 - "$SNAPSHOT_FILE" "$report_path" "$mode" "$status" "$TS_ISO" "$NAME" "$DISPLAY_NAME_SAFE" "$CANDIDATE_SAFE" "$PROJECT_ROOT" "$WORKSPACE_ROOT" "$WORKSPACE_DISCOVERY_NOTE" "$BACKUP_DIR" "$AGENT_LOGS_DIR" "$WORK_PRODUCTS_DIR" "$SUBMISSIONS_DIR" "$AGENT_LOGS_ARCHIVE_PATH" "$WORK_PRODUCTS_ARCHIVE_PATH" "$SUBMISSIONS_ARCHIVE_PATH" "$EXAM_DATE" <<'PY'
 import json
 import sys
 
 (snapshot_path, report_path, mode, status, created_at, candidate_name, display_name_safe, candidate_safe, project_root,
- workspace_root, workspace_note, backup_dir, agent_logs_dir, work_products_dir, submissions_dir, exam_date) = sys.argv[1:]
+ workspace_root, workspace_note, backup_dir, agent_logs_dir, work_products_dir, submissions_dir,
+ agent_logs_archive, work_products_archive, submissions_archive, exam_date) = sys.argv[1:]
 
 sources = []
 with open(snapshot_path, "r", encoding="utf-8") as handle:
@@ -449,6 +460,9 @@ payload = {
         "agentLogsDir": agent_logs_dir,
         "workProductsDir": work_products_dir,
         "submissionsDir": submissions_dir,
+        "agentLogsArchive": agent_logs_archive,
+        "workProductsArchive": work_products_archive,
+        "submissionsArchive": submissions_archive,
     },
     "examDate": exam_date,
     "sources": sources,
@@ -470,18 +484,13 @@ verify_expected_copy() {
   return 0
 }
 
-verify_backup() {
+verify_copied_backup() {
   local ok=1
 
   [[ -d "$BACKUP_DIR" ]] || { warn "Backup directory missing"; ok=0; }
   [[ -d "$AGENT_LOGS_DIR" ]] || { warn "Agent logs directory missing"; ok=0; }
   [[ -d "$WORK_PRODUCTS_DIR" ]] || { warn "Work products directory missing"; ok=0; }
   [[ -d "$SUBMISSIONS_DIR" ]] || { warn "Submissions directory missing"; ok=0; }
-  [[ -s "$AGENT_LOGS_ARCHIVE_PATH" ]] || { warn "Agent logs archive missing"; ok=0; }
-  [[ -s "$WORK_PRODUCTS_ARCHIVE_PATH" ]] || { warn "Work products archive missing"; ok=0; }
-  [[ -s "$SUBMISSIONS_ARCHIVE_PATH" ]] || { warn "Submissions archive missing"; ok=0; }
-  [[ -f "$MANIFEST_PATH" ]] || { warn "Manifest missing"; ok=0; }
-  [[ -f "$REPORT_PATH" ]] || { warn "Report missing"; ok=0; }
 
   verify_expected_copy "$CURSOR_WORKSPACE_STORAGE" "$AGENT_LOGS_DIR/cursor/User/workspaceStorage" || ok=0
   verify_expected_copy "$CURSOR_GLOBAL_STORAGE" "$AGENT_LOGS_DIR/cursor/User/globalStorage" || ok=0
@@ -508,7 +517,19 @@ verify_backup() {
   fi
   verify_expected_copy "$PROJECT_ARTIFACTS_PATH" "$SUBMISSIONS_DIR/.artifacts" || ok=0
 
-  [[ "$ok" -eq 1 ]] || die "Backup verification failed. Nothing will be reset."
+  [[ "$ok" -eq 1 ]] || die "Backup verification failed before compression. Nothing will be reset."
+}
+
+verify_final_backup() {
+  local ok=1
+
+  [[ -d "$BACKUP_DIR" ]] || { warn "Backup directory missing"; ok=0; }
+  [[ -s "$AGENT_LOGS_ARCHIVE_PATH" ]] || { warn "Agent logs archive missing"; ok=0; }
+  [[ -s "$WORK_PRODUCTS_ARCHIVE_PATH" ]] || { warn "Work products archive missing"; ok=0; }
+  [[ -s "$SUBMISSIONS_ARCHIVE_PATH" ]] || { warn "Submissions archive missing"; ok=0; }
+  [[ -f "$REPORT_PATH" ]] || { warn "Report missing"; ok=0; }
+
+  [[ "$ok" -eq 1 ]] || die "Final backup verification failed. Nothing will be reset."
 
   log "Backup verification passed"
   log "Backup dir: $BACKUP_DIR"
@@ -568,13 +589,14 @@ do_backup() {
   copy_if_exists "$WORKSPACE_ROOT" "$WORK_PRODUCTS_DIR/"
   copy_if_exists "$PROJECT_ARTIFACTS_PATH" "$SUBMISSIONS_DIR/"
 
+  write_report_json "backup" "backup_completed" "$REPORT_PATH"
+  verify_copied_backup
+
   create_directory_archive "$AGENT_LOGS_DIR" "$AGENT_LOGS_ARCHIVE_PATH"
   create_directory_archive "$WORK_PRODUCTS_DIR" "$WORK_PRODUCTS_ARCHIVE_PATH"
   create_directory_archive "$SUBMISSIONS_DIR" "$SUBMISSIONS_ARCHIVE_PATH"
-
-  write_manifest
-  write_report_json "backup" "backup_completed" "$REPORT_PATH"
-  verify_backup
+  remove_backup_directories
+  verify_final_backup
 }
 
 safe_remove_file() {
@@ -631,6 +653,9 @@ do_reset() {
 
   remove_dir_if_exists "$WORKSPACE_ROOT"
   remove_contents "$PROJECT_ARTIFACTS_PATH"
+  clear_directory_entries "${HOME}/Downloads" "$BACKUP_DIR"
+  clear_directory_entries "${HOME}/Documents"
+  clear_directory_entries "${HOME}/Desktop"
 
   write_report_json "reset" "reset_completed" "$REPORT_PATH"
   log "Reset completed after verified local backup"
@@ -642,11 +667,26 @@ do_restore() {
   RESTORE_FROM="$(expand_path "$RESTORE_FROM")"
   [[ -d "$RESTORE_FROM" ]] || die "Backup directory not found: $RESTORE_FROM"
   require_cmd rsync
+  require_cmd tar
 
   local agent_dir work_dir submission_dir
+  local agent_archive work_archive submission_archive
   agent_dir="$(find "$RESTORE_FROM" -maxdepth 1 -type d -name '*_에이전트채팅로그' | head -n 1)"
   work_dir="$(find "$RESTORE_FROM" -maxdepth 1 -type d -name '*_작업물' | head -n 1)"
   submission_dir="$(find "$RESTORE_FROM" -maxdepth 1 -type d -name '*_제출물' | head -n 1)"
+  agent_archive="$(find "$RESTORE_FROM" -maxdepth 1 -type f -name '*_에이전트채팅로그.tar.gz' | head -n 1)"
+  work_archive="$(find "$RESTORE_FROM" -maxdepth 1 -type f -name '*_작업물.tar.gz' | head -n 1)"
+  submission_archive="$(find "$RESTORE_FROM" -maxdepth 1 -type f -name '*_제출물.tar.gz' | head -n 1)"
+
+  if [[ -z "$agent_dir" || -z "$work_dir" || -z "$submission_dir" ]]; then
+    RESTORE_TEMP_DIR="$(mktemp -d)"
+    extract_archive_to_parent "$agent_archive" "$RESTORE_TEMP_DIR"
+    extract_archive_to_parent "$work_archive" "$RESTORE_TEMP_DIR"
+    extract_archive_to_parent "$submission_archive" "$RESTORE_TEMP_DIR"
+    [[ -n "$agent_dir" ]] || agent_dir="$(find "$RESTORE_TEMP_DIR" -maxdepth 1 -type d -name '*_에이전트채팅로그' | head -n 1)"
+    [[ -n "$work_dir" ]] || work_dir="$(find "$RESTORE_TEMP_DIR" -maxdepth 1 -type d -name '*_작업물' | head -n 1)"
+    [[ -n "$submission_dir" ]] || submission_dir="$(find "$RESTORE_TEMP_DIR" -maxdepth 1 -type d -name '*_제출물' | head -n 1)"
+  fi
 
   stop_processes
 
