@@ -65,6 +65,7 @@ ANTIGRAVITY_GLOBAL_STORAGE="${ANTIGRAVITY_CONFIG_ROOT}/globalStorage"
 
 SNAPSHOT_FILE=""
 RESTORE_TEMP_DIR=""
+BACKUP_STAGE_DIR=""
 
 log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*"; }
 warn() { printf '[%s] WARN: %s\n' "$(date '+%F %T')" "$*" >&2; }
@@ -73,6 +74,7 @@ die() { printf '[%s] ERROR: %s\n' "$(date '+%F %T')" "$*" >&2; exit 1; }
 cleanup_tmp() {
   [[ -n "${SNAPSHOT_FILE:-}" && -f "${SNAPSHOT_FILE:-}" ]] && rm -f "$SNAPSHOT_FILE"
   [[ -n "${RESTORE_TEMP_DIR:-}" && -d "${RESTORE_TEMP_DIR:-}" ]] && rm -rf "$RESTORE_TEMP_DIR"
+  [[ -n "${BACKUP_STAGE_DIR:-}" && -d "${BACKUP_STAGE_DIR:-}" ]] && rm -rf "$BACKUP_STAGE_DIR"
 }
 trap cleanup_tmp EXIT
 
@@ -397,17 +399,14 @@ clear_directory_entries() {
 
   [[ -d "$target_dir" ]] || return 0
 
-  shopt -s nullglob
-  for entry in "$target_dir"/* "$target_dir"/.[!.]* "$target_dir"/..?*; do
-    [[ -e "$entry" ]] || continue
+  while IFS= read -r -d '' entry; do
     if [[ -n "$excluded_path" && "$entry" == "$excluded_path" ]]; then
       log "Preserved path: $entry"
       continue
     fi
     rm -rf "$entry"
     log "Removed path: $entry"
-  done
-  shopt -u nullglob
+  done < <(find "$target_dir" -mindepth 1 -maxdepth 1 -print0)
 }
 
 write_report_json() {
@@ -560,8 +559,14 @@ do_backup() {
   require_cmd rsync
   require_cmd python3
   require_cmd tar
+  require_cmd find
   [[ ! -e "$BACKUP_DIR" ]] || die "Backup directory already exists: $BACKUP_DIR"
-  mkdir -p "$BACKUP_DIR" "$AGENT_LOGS_DIR" "$WORK_PRODUCTS_DIR" "$SUBMISSIONS_DIR"
+  mkdir -p "$BACKUP_DIR"
+  BACKUP_STAGE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/exam-cleanup-${CANDIDATE_SAFE}-XXXXXX")"
+  AGENT_LOGS_DIR="${BACKUP_STAGE_DIR}/${DISPLAY_NAME_SAFE}_에이전트채팅로그"
+  WORK_PRODUCTS_DIR="${BACKUP_STAGE_DIR}/${DISPLAY_NAME_SAFE}_작업물"
+  SUBMISSIONS_DIR="${BACKUP_STAGE_DIR}/${DISPLAY_NAME_SAFE}_제출물"
+  mkdir -p "$AGENT_LOGS_DIR" "$WORK_PRODUCTS_DIR" "$SUBMISSIONS_DIR"
 
   stop_processes
   capture_snapshot
