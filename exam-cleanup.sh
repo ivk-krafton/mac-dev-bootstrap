@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_NAME="$(basename "$0")"
 VERSION="0.2.0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_ROOT="$SCRIPT_DIR"
 
 DEFAULT_BACKUP_ROOT="${HOME}/Downloads"
 DEFAULT_WORKSPACE_ROOT="${FDE_WORKSPACE_ROOT:-${HOME}/Desktop}"
@@ -31,7 +31,7 @@ WORKSPACE_FOLDER_NAME=""
 WORKSPACE_STAMP=""
 EXAM_DATE=""
 WORKSPACE_DISCOVERY_NOTE=""
-PROJECT_SUBMISSIONS_PATH="${PROJECT_ROOT}/.artifacts/submissions"
+PROJECT_ARTIFACTS_PATH="${PROJECT_ROOT}/.artifacts"
 
 CURSOR_BASE="${HOME}/Library/Application Support/Cursor/User"
 CURSOR_WORKSPACE_STORAGE="${CURSOR_BASE}/workspaceStorage"
@@ -263,7 +263,7 @@ capture_snapshot() {
   append_snapshot "Antigravity context state" "$ANTIGRAVITY_CONTEXT_STATE" "agent"
   append_snapshot "Antigravity globalStorage" "$ANTIGRAVITY_GLOBAL_STORAGE" "agent"
   append_snapshot "Candidate workspace" "$WORKSPACE_ROOT" "work"
-  append_snapshot "Project submissions" "$PROJECT_SUBMISSIONS_PATH" "submission"
+  append_snapshot "Project artifacts" "$PROJECT_ARTIFACTS_PATH" "artifact"
 }
 
 print_snapshot_table() {
@@ -330,7 +330,7 @@ prepare_runtime() {
   DISPLAY_NAME_SAFE="$(sanitize_display_name "$NAME" "지원자")"
   CANDIDATE_SAFE="$(sanitize_segment "$NAME" "candidate")"
   discover_workspace
-  BACKUP_DIR="${DEFAULT_BACKUP_ROOT}/${DISPLAY_NAME_SAFE}_시험종료정리_${TS}"
+  BACKUP_DIR="${DEFAULT_BACKUP_ROOT}/${DISPLAY_NAME_SAFE}"
   AGENT_LOGS_DIR="${BACKUP_DIR}/${DISPLAY_NAME_SAFE}_에이전트채팅로그"
   WORK_PRODUCTS_DIR="${BACKUP_DIR}/${DISPLAY_NAME_SAFE}_작업물"
   SUBMISSIONS_DIR="${BACKUP_DIR}/${DISPLAY_NAME_SAFE}_제출물"
@@ -356,16 +356,6 @@ copy_if_exists() {
   else
     warn "Skipping missing path: $src"
   fi
-}
-
-copy_workspace_without_submissions() {
-  local src="$1"
-  local dst_parent="$2"
-  [[ -n "$src" && -d "$src" ]] || return 0
-
-  mkdir -p "$dst_parent"
-  rsync -a --exclude='.artifacts/submissions' "$src" "$dst_parent"
-  log "Backed up workspace without submissions: $src"
 }
 
 write_manifest() {
@@ -492,7 +482,7 @@ verify_backup() {
   if [[ -n "$WORKSPACE_ROOT" && -n "$WORKSPACE_FOLDER_NAME" ]]; then
     verify_expected_copy "$WORKSPACE_ROOT" "$WORK_PRODUCTS_DIR/$WORKSPACE_FOLDER_NAME" || ok=0
   fi
-  verify_expected_copy "$PROJECT_SUBMISSIONS_PATH" "$SUBMISSIONS_DIR/submissions" || ok=0
+  verify_expected_copy "$PROJECT_ARTIFACTS_PATH" "$SUBMISSIONS_DIR/.artifacts" || ok=0
 
   [[ "$ok" -eq 1 ]] || die "Backup verification failed. Nothing will be reset."
 
@@ -524,6 +514,7 @@ run_inspect() {
 do_backup() {
   require_cmd rsync
   require_cmd python3
+  [[ ! -e "$BACKUP_DIR" ]] || die "Backup directory already exists: $BACKUP_DIR"
   mkdir -p "$BACKUP_DIR" "$AGENT_LOGS_DIR" "$WORK_PRODUCTS_DIR" "$SUBMISSIONS_DIR"
 
   stop_processes
@@ -549,9 +540,8 @@ do_backup() {
   copy_if_exists "$ANTIGRAVITY_CONTEXT_STATE" "$AGENT_LOGS_DIR/antigravity/"
   copy_if_exists "$ANTIGRAVITY_GLOBAL_STORAGE" "$AGENT_LOGS_DIR/antigravity/"
 
-  copy_workspace_without_submissions "$WORKSPACE_ROOT" "$WORK_PRODUCTS_DIR/"
-
-  copy_if_exists "$PROJECT_SUBMISSIONS_PATH" "$SUBMISSIONS_DIR/"
+  copy_if_exists "$WORKSPACE_ROOT" "$WORK_PRODUCTS_DIR/"
+  copy_if_exists "$PROJECT_ARTIFACTS_PATH" "$SUBMISSIONS_DIR/"
 
   write_manifest
   write_report_json "backup" "backup_completed" "$REPORT_PATH"
@@ -611,7 +601,7 @@ do_reset() {
   remove_contents "$ANTIGRAVITY_GLOBAL_STORAGE"
 
   remove_dir_if_exists "$WORKSPACE_ROOT"
-  remove_contents "$PROJECT_SUBMISSIONS_PATH"
+  remove_contents "$PROJECT_ARTIFACTS_PATH"
 
   write_report_json "reset" "reset_completed" "$REPORT_PATH"
   log "Reset completed after verified local backup"
@@ -674,10 +664,9 @@ do_restore() {
     fi
   fi
 
-  if [[ -d "$submission_dir/submissions" ]]; then
-    mkdir -p "$PROJECT_ROOT/.artifacts"
-    rm -rf "$PROJECT_SUBMISSIONS_PATH"
-    rsync -a "$submission_dir/submissions" "$PROJECT_ROOT/.artifacts/"
+  if [[ -d "$submission_dir/.artifacts" ]]; then
+    rm -rf "$PROJECT_ARTIFACTS_PATH"
+    rsync -a "$submission_dir/.artifacts" "$PROJECT_ROOT/"
   fi
 
   log "Restore completed from: $RESTORE_FROM"
@@ -748,4 +737,3 @@ main() {
 }
 
 main "$@"
-
