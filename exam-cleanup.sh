@@ -23,6 +23,9 @@ BACKUP_DIR=""
 AGENT_LOGS_DIR=""
 WORK_PRODUCTS_DIR=""
 SUBMISSIONS_DIR=""
+AGENT_LOGS_ARCHIVE_PATH=""
+WORK_PRODUCTS_ARCHIVE_PATH=""
+SUBMISSIONS_ARCHIVE_PATH=""
 MANIFEST_PATH=""
 REPORT_PATH=""
 
@@ -334,6 +337,9 @@ prepare_runtime() {
   AGENT_LOGS_DIR="${BACKUP_DIR}/${DISPLAY_NAME_SAFE}_에이전트채팅로그"
   WORK_PRODUCTS_DIR="${BACKUP_DIR}/${DISPLAY_NAME_SAFE}_작업물"
   SUBMISSIONS_DIR="${BACKUP_DIR}/${DISPLAY_NAME_SAFE}_제출물"
+  AGENT_LOGS_ARCHIVE_PATH="${BACKUP_DIR}/${DISPLAY_NAME_SAFE}_에이전트채팅로그.tar.gz"
+  WORK_PRODUCTS_ARCHIVE_PATH="${BACKUP_DIR}/${DISPLAY_NAME_SAFE}_작업물.tar.gz"
+  SUBMISSIONS_ARCHIVE_PATH="${BACKUP_DIR}/${DISPLAY_NAME_SAFE}_제출물.tar.gz"
   MANIFEST_PATH="${BACKUP_DIR}/manifest.txt"
   REPORT_PATH="${BACKUP_DIR}/report.json"
 }
@@ -358,6 +364,18 @@ copy_if_exists() {
   fi
 }
 
+create_directory_archive() {
+  local source_dir="$1"
+  local archive_path="$2"
+
+  [[ -d "$source_dir" ]] || return 0
+
+  rm -f "$archive_path"
+  tar -C "$(dirname "$source_dir")" -czf "$archive_path" "$(basename "$source_dir")"
+  [[ -s "$archive_path" ]] || die "Archive was not created correctly: $archive_path"
+  log "Created archive: $archive_path"
+}
+
 write_manifest() {
   {
     printf 'created_at=%s\n' "$TS_ISO"
@@ -372,6 +390,9 @@ write_manifest() {
     printf 'agent_logs_dir=%s\n' "$AGENT_LOGS_DIR"
     printf 'work_products_dir=%s\n' "$WORK_PRODUCTS_DIR"
     printf 'submissions_dir=%s\n' "$SUBMISSIONS_DIR"
+    printf 'agent_logs_archive=%s\n' "$AGENT_LOGS_ARCHIVE_PATH"
+    printf 'work_products_archive=%s\n' "$WORK_PRODUCTS_ARCHIVE_PATH"
+    printf 'submissions_archive=%s\n' "$SUBMISSIONS_ARCHIVE_PATH"
     printf '\n[snapshot]\n'
     while IFS=$'\t' read -r label kind path_value exists files bytes; do
       printf '%s | %s | %s | files=%s | bytes=%s | %s\n' "$label" "$kind" "$exists" "$files" "$bytes" "$path_value"
@@ -456,6 +477,9 @@ verify_backup() {
   [[ -d "$AGENT_LOGS_DIR" ]] || { warn "Agent logs directory missing"; ok=0; }
   [[ -d "$WORK_PRODUCTS_DIR" ]] || { warn "Work products directory missing"; ok=0; }
   [[ -d "$SUBMISSIONS_DIR" ]] || { warn "Submissions directory missing"; ok=0; }
+  [[ -s "$AGENT_LOGS_ARCHIVE_PATH" ]] || { warn "Agent logs archive missing"; ok=0; }
+  [[ -s "$WORK_PRODUCTS_ARCHIVE_PATH" ]] || { warn "Work products archive missing"; ok=0; }
+  [[ -s "$SUBMISSIONS_ARCHIVE_PATH" ]] || { warn "Submissions archive missing"; ok=0; }
   [[ -f "$MANIFEST_PATH" ]] || { warn "Manifest missing"; ok=0; }
   [[ -f "$REPORT_PATH" ]] || { warn "Report missing"; ok=0; }
 
@@ -514,6 +538,7 @@ run_inspect() {
 do_backup() {
   require_cmd rsync
   require_cmd python3
+  require_cmd tar
   [[ ! -e "$BACKUP_DIR" ]] || die "Backup directory already exists: $BACKUP_DIR"
   mkdir -p "$BACKUP_DIR" "$AGENT_LOGS_DIR" "$WORK_PRODUCTS_DIR" "$SUBMISSIONS_DIR"
 
@@ -542,6 +567,10 @@ do_backup() {
 
   copy_if_exists "$WORKSPACE_ROOT" "$WORK_PRODUCTS_DIR/"
   copy_if_exists "$PROJECT_ARTIFACTS_PATH" "$SUBMISSIONS_DIR/"
+
+  create_directory_archive "$AGENT_LOGS_DIR" "$AGENT_LOGS_ARCHIVE_PATH"
+  create_directory_archive "$WORK_PRODUCTS_DIR" "$WORK_PRODUCTS_ARCHIVE_PATH"
+  create_directory_archive "$SUBMISSIONS_DIR" "$SUBMISSIONS_ARCHIVE_PATH"
 
   write_manifest
   write_report_json "backup" "backup_completed" "$REPORT_PATH"
