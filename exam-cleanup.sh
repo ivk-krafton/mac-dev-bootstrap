@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 SCRIPT_NAME="$(basename "$0")"
-VERSION="0.2.0"
+VERSION="0.2.2"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR"
 
@@ -41,6 +41,14 @@ CLAUDE_HISTORY="${CLAUDE_ROOT}/history.jsonl"
 CLAUDE_PROJECTS="${CLAUDE_ROOT}/projects"
 CLAUDE_TODOS="${CLAUDE_ROOT}/todos"
 CLAUDE_IDE="${CLAUDE_ROOT}/ide"
+CLAUDE_DESKTOP_ROOT="${HOME}/Library/Application Support/Claude"
+CLAUDE_DESKTOP_INDEXEDDB="${CLAUDE_DESKTOP_ROOT}/IndexedDB"
+CLAUDE_DESKTOP_LOCAL_STORAGE="${CLAUDE_DESKTOP_ROOT}/Local Storage"
+CLAUDE_DESKTOP_SESSION_STORAGE="${CLAUDE_DESKTOP_ROOT}/Session Storage"
+CLAUDE_DESKTOP_WEBSTORAGE="${CLAUDE_DESKTOP_ROOT}/WebStorage"
+CLAUDE_COWORK_SESSIONS="${CLAUDE_DESKTOP_ROOT}/local-agent-mode-sessions"
+
+CHATGPT_DESKTOP_ROOT="${HOME}/Library/Application Support/com.openai.chat"
 
 CODEX_ROOT="${HOME}/.codex"
 CODEX_HISTORY="${CODEX_ROOT}/history.jsonl"
@@ -252,6 +260,12 @@ capture_snapshot() {
   append_snapshot "Claude projects" "$CLAUDE_PROJECTS" "agent"
   append_snapshot "Claude todos" "$CLAUDE_TODOS" "agent"
   append_snapshot "Claude ide" "$CLAUDE_IDE" "agent"
+  append_snapshot "Claude Desktop IndexedDB" "$CLAUDE_DESKTOP_INDEXEDDB" "agent"
+  append_snapshot "Claude Desktop Local Storage" "$CLAUDE_DESKTOP_LOCAL_STORAGE" "agent"
+  append_snapshot "Claude Desktop Session Storage" "$CLAUDE_DESKTOP_SESSION_STORAGE" "agent"
+  append_snapshot "Claude Desktop WebStorage" "$CLAUDE_DESKTOP_WEBSTORAGE" "agent"
+  append_snapshot "Claude Cowork sessions" "$CLAUDE_COWORK_SESSIONS" "agent"
+  append_snapshot "ChatGPT Desktop data" "$CHATGPT_DESKTOP_ROOT" "agent"
   append_snapshot "Codex history" "$CODEX_HISTORY" "agent"
   append_snapshot "Codex sessions" "$CODEX_SESSIONS" "agent"
   append_snapshot "Codex config" "$CODEX_CONFIG" "config"
@@ -341,7 +355,7 @@ prepare_runtime() {
 }
 
 stop_processes() {
-  local names=(Cursor cursor claude codex Antigravity antigravity)
+  local names=(Cursor cursor Claude claude ChatGPT chatgpt codex Antigravity antigravity)
   for name in "${names[@]}"; do
     pkill -x "$name" >/dev/null 2>&1 || true
   done
@@ -487,6 +501,12 @@ verify_copied_backup() {
   verify_expected_copy "$CLAUDE_PROJECTS" "$AGENT_LOGS_DIR/claude/projects" || ok=0
   verify_expected_copy "$CLAUDE_TODOS" "$AGENT_LOGS_DIR/claude/todos" || ok=0
   verify_expected_copy "$CLAUDE_IDE" "$AGENT_LOGS_DIR/claude/ide" || ok=0
+  verify_expected_copy "$CLAUDE_DESKTOP_INDEXEDDB" "$AGENT_LOGS_DIR/claude-desktop/IndexedDB" || ok=0
+  verify_expected_copy "$CLAUDE_DESKTOP_LOCAL_STORAGE" "$AGENT_LOGS_DIR/claude-desktop/Local Storage" || ok=0
+  verify_expected_copy "$CLAUDE_DESKTOP_SESSION_STORAGE" "$AGENT_LOGS_DIR/claude-desktop/Session Storage" || ok=0
+  verify_expected_copy "$CLAUDE_DESKTOP_WEBSTORAGE" "$AGENT_LOGS_DIR/claude-desktop/WebStorage" || ok=0
+  verify_expected_copy "$CLAUDE_COWORK_SESSIONS" "$AGENT_LOGS_DIR/claude-desktop/local-agent-mode-sessions" || ok=0
+  verify_expected_copy "$CHATGPT_DESKTOP_ROOT" "$AGENT_LOGS_DIR/chatgpt-desktop/com.openai.chat" || ok=0
   verify_expected_copy "$CODEX_HISTORY" "$AGENT_LOGS_DIR/codex/history.jsonl" || ok=0
   verify_expected_copy "$CODEX_SESSIONS" "$AGENT_LOGS_DIR/codex/sessions" || ok=0
   verify_expected_copy "$CODEX_CONFIG" "$AGENT_LOGS_DIR/codex/config.toml" || ok=0
@@ -563,6 +583,12 @@ do_backup() {
   copy_if_exists "$CLAUDE_PROJECTS" "$AGENT_LOGS_DIR/claude/"
   copy_if_exists "$CLAUDE_TODOS" "$AGENT_LOGS_DIR/claude/"
   copy_if_exists "$CLAUDE_IDE" "$AGENT_LOGS_DIR/claude/"
+  copy_if_exists "$CLAUDE_DESKTOP_INDEXEDDB" "$AGENT_LOGS_DIR/claude-desktop/"
+  copy_if_exists "$CLAUDE_DESKTOP_LOCAL_STORAGE" "$AGENT_LOGS_DIR/claude-desktop/"
+  copy_if_exists "$CLAUDE_DESKTOP_SESSION_STORAGE" "$AGENT_LOGS_DIR/claude-desktop/"
+  copy_if_exists "$CLAUDE_DESKTOP_WEBSTORAGE" "$AGENT_LOGS_DIR/claude-desktop/"
+  copy_if_exists "$CLAUDE_COWORK_SESSIONS" "$AGENT_LOGS_DIR/claude-desktop/"
+  copy_if_exists "$CHATGPT_DESKTOP_ROOT" "$AGENT_LOGS_DIR/chatgpt-desktop/"
   copy_if_exists "$CODEX_HISTORY" "$AGENT_LOGS_DIR/codex/"
   copy_if_exists "$CODEX_SESSIONS" "$AGENT_LOGS_DIR/codex/"
   copy_if_exists "$CODEX_CONFIG" "$AGENT_LOGS_DIR/codex/"
@@ -627,6 +653,12 @@ do_reset() {
   remove_contents "$CLAUDE_PROJECTS"
   remove_contents "$CLAUDE_TODOS"
   remove_contents "$CLAUDE_IDE"
+  remove_contents "$CLAUDE_DESKTOP_INDEXEDDB"
+  remove_contents "$CLAUDE_DESKTOP_LOCAL_STORAGE"
+  remove_contents "$CLAUDE_DESKTOP_SESSION_STORAGE"
+  remove_contents "$CLAUDE_DESKTOP_WEBSTORAGE"
+  remove_contents "$CLAUDE_COWORK_SESSIONS"
+  remove_contents "$CHATGPT_DESKTOP_ROOT"
 
   safe_remove_file "$CODEX_HISTORY"
   remove_contents "$CODEX_SESSIONS"
@@ -690,6 +722,12 @@ do_restore() {
   [[ -d "$agent_dir/claude/projects" ]] && { rm -rf "$CLAUDE_PROJECTS"; rsync -a "$agent_dir/claude/projects" "$CLAUDE_ROOT/"; }
   [[ -d "$agent_dir/claude/todos" ]] && { rm -rf "$CLAUDE_TODOS"; rsync -a "$agent_dir/claude/todos" "$CLAUDE_ROOT/"; }
   [[ -d "$agent_dir/claude/ide" ]] && { rm -rf "$CLAUDE_IDE"; rsync -a "$agent_dir/claude/ide" "$CLAUDE_ROOT/"; }
+  [[ -d "$agent_dir/claude-desktop/IndexedDB" ]] && { rm -rf "$CLAUDE_DESKTOP_INDEXEDDB"; mkdir -p "$CLAUDE_DESKTOP_ROOT"; rsync -a "$agent_dir/claude-desktop/IndexedDB" "$CLAUDE_DESKTOP_ROOT/"; }
+  [[ -d "$agent_dir/claude-desktop/Local Storage" ]] && { rm -rf "$CLAUDE_DESKTOP_LOCAL_STORAGE"; mkdir -p "$CLAUDE_DESKTOP_ROOT"; rsync -a "$agent_dir/claude-desktop/Local Storage" "$CLAUDE_DESKTOP_ROOT/"; }
+  [[ -d "$agent_dir/claude-desktop/Session Storage" ]] && { rm -rf "$CLAUDE_DESKTOP_SESSION_STORAGE"; mkdir -p "$CLAUDE_DESKTOP_ROOT"; rsync -a "$agent_dir/claude-desktop/Session Storage" "$CLAUDE_DESKTOP_ROOT/"; }
+  [[ -d "$agent_dir/claude-desktop/WebStorage" ]] && { rm -rf "$CLAUDE_DESKTOP_WEBSTORAGE"; mkdir -p "$CLAUDE_DESKTOP_ROOT"; rsync -a "$agent_dir/claude-desktop/WebStorage" "$CLAUDE_DESKTOP_ROOT/"; }
+  [[ -d "$agent_dir/claude-desktop/local-agent-mode-sessions" ]] && { rm -rf "$CLAUDE_COWORK_SESSIONS"; mkdir -p "$CLAUDE_DESKTOP_ROOT"; rsync -a "$agent_dir/claude-desktop/local-agent-mode-sessions" "$CLAUDE_DESKTOP_ROOT/"; }
+  [[ -d "$agent_dir/chatgpt-desktop/com.openai.chat" ]] && { rm -rf "$CHATGPT_DESKTOP_ROOT"; mkdir -p "$(dirname "$CHATGPT_DESKTOP_ROOT")"; rsync -a "$agent_dir/chatgpt-desktop/com.openai.chat" "$(dirname "$CHATGPT_DESKTOP_ROOT")/"; }
 
   mkdir -p "$CODEX_ROOT"
   [[ -f "$agent_dir/codex/history.jsonl" ]] && rsync -a "$agent_dir/codex/history.jsonl" "$CODEX_ROOT/"
